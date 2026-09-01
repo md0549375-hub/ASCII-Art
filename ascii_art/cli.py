@@ -87,6 +87,10 @@ def build_parser() -> argparse.ArgumentParser:
     video_parser.add_argument("path", type=Path, help="path to a video")
     video_parser.add_argument("--color", action="store_true", help="use ANSI true-color")
     video_parser.add_argument(
+        "--renderer", choices=("auto", "ascii", "ultra"), default="auto",
+        help="video renderer (default: auto; ultra enables optimized true-color half-block)",
+    )
+    video_parser.add_argument(
         "--mono",
         dest="color",
         action="store_false",
