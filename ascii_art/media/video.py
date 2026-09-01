@@ -96,6 +96,34 @@ def _render_mono(array: Any, ramp: str, np: Any) -> str:
     return "\n".join("".join(ramp[index] for index in row) for row in indices.tolist())
 
 
+def _render_half_block(array: Any, quantization: int, np: Any) -> str:
+    """Render two source pixels per terminal row using a true-color half block."""
+    height = array.shape[0]
+    if height < 2:
+        return ""
+    if height % 2:
+        array = array[:-1]
+        height -= 1
+
+    top = np.clip(array[0:height:2], 0, 255).astype(np.int32)
+    bottom = np.clip(array[1:height:2], 0, 255).astype(np.int32)
+    if quantization > 1:
+        top = (top // quantization) * quantization
+        bottom = (bottom // quantization) * quantization
+
+    lines = []
+    for y in range(top.shape[0]):
+        parts = []
+        for x in range(top.shape[1]):
+            tr, tg, tb = top[y, x]
+            br, bg, bb = bottom[y, x]
+            parts.append(
+                f"\033[38;2;{tr};{tg};{tb};48;2;{br};{bg};{bb}m▀"
+            )
+        lines.append("".join(parts) + "\033[0m")
+    return "\n".join(lines)
+
+
 def _render_color(array: Any, ramp: str, quantization: int, np: Any) -> str:
     brightness = 0.299 * array[..., 0] + 0.587 * array[..., 1] + 0.114 * array[..., 2]
     char_indices = np.clip(
@@ -171,12 +199,14 @@ def play_video(video: Path, *, options: VideoOptions, ramp: str) -> None:
     np = _load_numpy()
     source_width, source_height = get_video_dimensions(video) or (16, 9)
     cols, rows = fit_source_size(source_width, source_height, max_width=options.max_width)
+    render_rows = rows
+    pixel_rows = rows * 2 if options.color else rows
     pixel_format = "rgb24" if options.color else "gray"
     channels = 3 if options.color else 1
-    frame_size = cols * rows * channels
+    frame_size = cols * pixel_rows * channels
 
     print(f"Video: {video.name}")
-    print(f"Render: {cols} x {rows} characters at {options.fps:g} FPS")
+    print(f"Render: {cols} x {render_rows} terminal rows at {options.fps:g} FPS")
     print(f"Mode: {'ANSI true-color' if options.color else 'monochrome'}")
     print(f"Audio: {'enabled' if options.audio else 'disabled'}")
     print("Starting... Press Ctrl+C to stop.")
@@ -249,11 +279,11 @@ def play_video(video: Path, *, options: VideoOptions, ramp: str) -> None:
                 if lag < 0:
                     time.sleep(-lag)
 
-                current = _frame_array(raw, rows, cols, options.color, np)
+                current = _frame_array(raw, pixel_rows, cols, options.color, np)
                 current = _smooth(current, previous, options.smoothing)
                 previous = current
                 if options.color:
-                    frame = _render_color(current, ramp, options.quantization, np)
+                    frame = _render_half_block(current, options.quantization, np)
                 else:
                     frame = _render_mono(current, ramp, np)
                 draw_frame(frame)
