@@ -23,7 +23,7 @@ class VideoOptions:
     color: bool = False
     renderer: str = "auto"
     smoothing: float = 1.0
-    quantization: int = 4
+    quantization: float = 4.0
     max_frame_skip: int = 30
     audio: bool = True
     audio_delay: float = 0.0
@@ -109,7 +109,7 @@ def _render_mono(array: Any, ramp: str, np: Any) -> str:
     return "\n".join("".join(ramp[index] for index in row) for row in indices.tolist())
 
 
-def _render_half_block(array: Any, quantization: int, np: Any) -> str:
+def _render_half_block(array: Any, quantization: float, np: Any) -> str:
     """Render two source pixels per terminal row using a true-color half block."""
     height = array.shape[0]
     if height < 2:
@@ -120,9 +120,9 @@ def _render_half_block(array: Any, quantization: int, np: Any) -> str:
 
     top = np.clip(array[0:height:2], 0, 255).astype(np.int32)
     bottom = np.clip(array[1:height:2], 0, 255).astype(np.int32)
-    if quantization > 1:
-        top = (top // quantization) * quantization
-        bottom = (bottom // quantization) * quantization
+    if quantization > 1.0:
+        top = ((top.astype(np.float32) // quantization) * quantization).astype(np.uint8)
+        bottom = ((bottom.astype(np.float32) // quantization) * quantization).astype(np.uint8)
 
     lines = []
     for y in range(top.shape[0]):
@@ -137,7 +137,7 @@ def _render_half_block(array: Any, quantization: int, np: Any) -> str:
     return "\n".join(lines)
 
 
-def _render_half_block_ultra(array: Any, quantization: int, np: Any) -> str:
+def _render_half_block_ultra(array: Any, quantization: float, np: Any) -> str:
     """Optimized true-color half-block renderer with ANSI run grouping."""
     height = array.shape[0]
     if height < 2:
@@ -148,9 +148,9 @@ def _render_half_block_ultra(array: Any, quantization: int, np: Any) -> str:
 
     top = np.clip(array[0:height:2], 0, 255).astype(np.uint8)
     bottom = np.clip(array[1:height:2], 0, 255).astype(np.uint8)
-    if quantization > 1:
-        top = (top // quantization) * quantization
-        bottom = (bottom // quantization) * quantization
+    if quantization > 1.0:
+        top = ((top.astype(np.float32) // quantization) * quantization).astype(np.uint8)
+        bottom = ((bottom.astype(np.float32) // quantization) * quantization).astype(np.uint8)
 
     rows, cols = top.shape[:2]
     lines = []
@@ -176,13 +176,13 @@ def _render_half_block_ultra(array: Any, quantization: int, np: Any) -> str:
     return "\n".join(lines)
 
 
-def _render_color(array: Any, ramp: str, quantization: int, np: Any) -> str:
+def _render_color(array: Any, ramp: str, quantization: float, np: Any) -> str:
     brightness = 0.299 * array[..., 0] + 0.587 * array[..., 1] + 0.114 * array[..., 2]
     char_indices = np.clip(
         (brightness * (len(ramp) - 1) / 255).astype(np.int32), 0, len(ramp) - 1
     )
     clipped = np.clip(array, 0, 255)
-    if quantization > 1:
+    if quantization > 1.0:
         colors = (clipped // quantization * quantization).astype(np.int64)
     else:
         colors = clipped.astype(np.int64)
