@@ -1,4 +1,4 @@
-"""FFmpeg-backed monochrome and ANSI true-color video playback."""
+'''FFmpeg-backed monochrome and ANSI true-color video playback.'''
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class VideoOptions:
     renderer: str = "auto"
     smoothing: float = 1.0
     quantization: int = 4
-    max_frame_skip: int = 5
+    max_frame_skip: int = 30
     audio: bool = True
     audio_delay: float = 0.0
 
@@ -40,8 +40,14 @@ def _load_numpy() -> Any:
 
 
 def read_frame(stream: BinaryIO, size: int) -> bytes | None:
-    """Read one complete raw frame, returning None for EOF or a partial frame."""
-    data = bytearray()
+    """Read one complete raw frame with a fast path for full pipe reads."""
+    first = stream.read(size)
+    if not first:
+        return None
+    if len(first) == size:
+        return first
+
+    data = bytearray(first)
     while len(data) < size:
         chunk = stream.read(size - len(data))
         if not chunk:
@@ -79,9 +85,15 @@ def get_video_dimensions(video: Path) -> tuple[int, int] | None:
         return None
 
 
-def _frame_array(raw: bytes, rows: int, cols: int, color: bool, np: Any) -> Any:
+def _frame_array(
+    raw: bytes, rows: int, cols: int, color: bool, smoothing: float, np: Any
+) -> Any:
     shape = (rows, cols, 3) if color else (rows, cols)
-    return np.frombuffer(raw, dtype=np.uint8).reshape(shape).astype(np.float32)
+    frame = np.frombuffer(raw, dtype=np.uint8).reshape(shape)
+    # Crisp playback does not need a float32 copy; keep the FFmpeg buffer view.
+    if smoothing >= 0.999:
+        return frame
+    return frame.astype(np.float32)
 
 
 def _smooth(current: Any, previous: Any | None, factor: float) -> Any:
@@ -313,6 +325,8 @@ def play_video(video: Path, *, options: VideoOptions, ramp: str) -> None:
                 frame_index += 1
                 lag = now - target_time
                 if lag > frame_duration and consecutive_drops < options.max_frame_skip:
+                    # Drop stale frames before spending CPU on NumPy/rendering.
+                    # This keeps wall-clock latency bounded when rendering falls behind.
                     consecutive_drops += 1
                     continue
 
@@ -320,7 +334,9 @@ def play_video(video: Path, *, options: VideoOptions, ramp: str) -> None:
                 if lag < 0:
                     time.sleep(-lag)
 
-                current = _frame_array(raw, pixel_rows, cols, options.color, np)
+                current = _frame_array(
+                    raw, pixel_rows, cols, options.color, options.smoothing, np
+                )
                 current = _smooth(current, previous, options.smoothing)
                 previous = current
                 if options.color:

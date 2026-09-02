@@ -1,4 +1,4 @@
-"""Terminal sizing, drawing, and animation lifecycle helpers."""
+'''Terminal sizing, drawing, and animation lifecycle helpers.'''
 
 from __future__ import annotations
 
@@ -83,19 +83,20 @@ def _enable_windows_ansi() -> None:
 def terminal_session() -> Iterator[None]:
     """Prepare the terminal and always restore its cursor and colors."""
     _enable_windows_ansi()
-    sys.stdout.write("\033[2J\033[H\033[?25l")
-    sys.stdout.flush()
+    output = sys.stdout.buffer
+    output.write(b"\033[2J\033[H\033[?25l")
+    output.flush()
     try:
         yield
     finally:
-        sys.stdout.write("\033[0m\033[?25h\n")
-        sys.stdout.flush()
+        output.write(b"\033[0m\033[?25h\n")
+        output.flush()
 
 
 def draw_frame(frame: str) -> None:
-    sys.stdout.write("\033[H")
-    sys.stdout.write(frame)
-    sys.stdout.flush()
+    output = sys.stdout.buffer
+    output.write(b"\033[H" + frame.encode("utf-8"))
+    output.flush()
 
 
 def run_animation(
