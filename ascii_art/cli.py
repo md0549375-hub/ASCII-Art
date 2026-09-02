@@ -22,6 +22,13 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return parsed
+
+
 def _nonnegative_int(value: str) -> int:
     parsed = int(value)
     if parsed < 0:
@@ -108,8 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     video_parser.add_argument(
         "--quant",
-        type=_positive_int,
-        default=4,
+        type=_positive_float,
+        default=4.0,
         help="color quantization step used to reduce ANSI output",
     )
     video_parser.add_argument(
